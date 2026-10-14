@@ -1,0 +1,70 @@
+## Build ovolesti as a package tarball, install it with 'pkg install' (which
+## compiles the oct-files against the vendored dependencies, exactly as a user
+## install does), then run every class test suite and inline BIST block.
+##
+## Runs on the official GNU Octave images (gnuoctave/octave), at the minimum
+## supported version (DESCRIPTION: octave >= 9.1) and 11.3.0 release.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Octave ${{ matrix.octave }}
+    runs-on: ubuntu-latest
+    container: gnuoctave/octave:${{ matrix.octave }}
+    strategy:
+      fail-fast: false
+      matrix:
+        octave: ["9.1.0", "11.3.0"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build package tarball
+        run: |
+          tar --exclude=./.git --exclude=./.github \
+              --transform 's,^\.,ovolesti,' \
+              -czf "$RUNNER_TEMP/ovolesti.tar.gz" .
+
+      - name: Install package
+        run: |
+          octave-cli --norc --eval "pkg install -verbose '$RUNNER_TEMP/ovolesti.tar.gz'"
+
+      - name: Run tests
+        run: |
+          octave-cli --norc --eval '
+            pkg load ovolesti;
+            info = pkg ("list", "ovolesti");
+            printf ("ovolesti %s, Octave %s\n", info{1}.version, OCTAVE_VERSION);
+            pkgdir = info{1}.dir;
+            files = [glob(fullfile (pkgdir, "tests", "*.m-tst"));
+                     glob(fullfile (pkgdir, "*.m"))];
+            tot_p = 0; tot_t = 0; nfail = 0;
+            for i = 1:numel (files)
+              f = files{i};
+              if (isempty (regexp (fileread (f), "^%!", "once", "lineanchors")))
+                continue;   ## no BIST blocks in this file
+              endif
+              [np, nt] = test (f, "normal");
+              tot_p += np;
+              tot_t += nt;
+              [~, name, ext] = fileparts (f);
+              printf ("%-24s PASSES %d out of %d\n", [name ext], np, nt);
+              if (np < nt)
+                nfail += 1;
+                test (f, "verbose");   ## surface the failing block(s)
+              endif
+            endfor
+            printf ("----\nTOTAL: %d out of %d  (%d file(s) with failures)\n", ...
+                    tot_p, tot_t, nfail);
+            if (tot_t == 0)
+              error ("CI: no tests were found in the installed package");
+            endif
+            exit (nfail > 0);
+          '

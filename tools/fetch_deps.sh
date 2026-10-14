@@ -70,10 +70,10 @@ if [ ! -d "$VOLESTI_DIR" ]; then
 
   # --- Strip volesti — keep only include/ and external/ ----------------------
   echo "Stripping volesti source ..."
-  for item in "$VOLESTI_DIR"/*; do
+  for item in "$VOLESTI_DIR"/* "$VOLESTI_DIR"/.*; do
     name=$(basename "$item")
     case "$name" in
-      include|external) ;;
+      .|..|include|external) ;;
       *) rm -rf "$item" ;;
     esac
   done

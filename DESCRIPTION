@@ -1,6 +1,6 @@
 Name: ovolesti
-Version: 0.1.0
-Date: 2026-07-15
+Version: 0.0.1
+Date: 2026-10-13
 Author: Vissarion Fisikopoulos <vissarion@users.noreply.github.com>
 Maintainer: Vissarion Fisikopoulos <vissarion@users.noreply.github.com>
 Title: Octave binding for volesti

@@ -1,5 +1,6 @@
 # ovolesti
 
+[![CI](https://github.com/GeomScale/ovolesti/actions/workflows/ci.yml/badge.svg)](https://github.com/GeomScale/ovolesti/actions/workflows/ci.yml)
 [![Octave](https://img.shields.io/badge/Octave-%3E%3D9.1-blue)](https://www.octave.org)
 [![License](https://img.shields.io/badge/License-GPLv3%2B-green)](./LICENSE)
 
