@@ -26,19 +26,19 @@
 %! A = [1 0; -1 0; 0 1; 0 -1];
 %! b = [1; 1; 1; 1];
 %! P = HPolytope (A, b);
-%! assert_equal (P.A, A);
-%! assert_equal (P.b, b);
+%! assert (P.A, A);
+%! assert (P.b, b);
 
 ## Scalar inequality (1 constraint, 1 dimension)
 %!test
 %! P = HPolytope ([1], [0]);
-%! assert_equal (P.A, [1]);
-%! assert_equal (P.b, [0]);
+%! assert (P.A, [1]);
+%! assert (P.b, [0]);
 
 ## b coerced from row to column
 %!test
 %! P = HPolytope ([1 0; 0 1], [1, 1]);
-%! assert_equal (P.b, [1; 1]);
+%! assert (P.b, [1; 1]);
 
 ## --- input validation ---
 
@@ -69,7 +69,7 @@
 %! b = [1; 1; 1; 1];
 %! P = HPolytope (A, b);
 %! pts = sample (P, 10, 5, [0; 0]);
-%! assert_equal (size (pts), [2, 5]);
+%! assert (size (pts), [2, 5]);
 
 %!test
 %! if (! exist ("__volesti_HPolytope__", "file"))
@@ -79,5 +79,5 @@
 %! b = [1; 1; 1; 1];
 %! P = HPolytope (A, b);
 %! vol = volume (P, 10, 1.0);
-%! assert_equal (size (vol), [1, 1]);
+%! assert (size (vol), [1, 1]);
 %! assert (vol > 0);
