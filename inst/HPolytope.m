@@ -39,7 +39,7 @@
 ## Right-hand side vector (m × 1).
 ## @end deftp
 ##
-## @seealso{HPolytope.sample, HPolytope.volume}
+## @seealso{HPolytope.sample, HPolytope.volume, HPolytope.is_in}
 ## @end deftp
 classdef HPolytope
 
@@ -195,6 +195,75 @@ classdef HPolytope
 
       vol = __volesti_HPolytope__ ("volume", this.A, this.b, ...
                                    walk_len, error_tol, seed);
+
+    endfunction
+
+    ## -*- texinfo -*-
+    ## @deftypefn {HPolytope} {@var{res} =} is_in (@var{P}, @var{x})
+    ## @deftypefnx {HPolytope} {@var{res} =} is_in (@var{P}, @var{x}, @var{tol})
+    ##
+    ## Test whether point(s) lie inside the H-polytope.
+    ##
+    ## @code{@var{res} = is_in (@var{P}, @var{x})} checks if the point @var{x}
+    ## (a @math{d \times 1} column vector or a @math{d \times N} matrix of @var{N}
+    ## points) satisfies the polytope linear constraints @math{@var{A} * x <= @var{b}}.
+    ##
+    ## @var{tol} is an optional non-negative numeric tolerance (default: 0.0).
+    ## A point @var{x} is considered inside if @math{@var{A} * x <= @var{b} + @var{tol}}.
+    ##
+    ## Returns a logical scalar if @var{x} is a single point, or a @math{1 \times N}
+    ## logical row vector if @var{x} contains multiple points.
+    ##
+    ## @seealso{HPolytope.sample, HPolytope.volume}
+    ## @end deftypefn
+    function res = is_in (this, x, tol)
+
+      ## Input validation
+      if (nargin < 2)
+        error ("HPolytope.is_in: X is required.");
+      endif
+      if (! isnumeric (x) || ! ismatrix (x) || isempty (x))
+        error ("HPolytope.is_in: X must be a non-empty numeric vector or matrix.");
+      endif
+      if (! isreal (x))
+        error ("HPolytope.is_in: X must be real.");
+      endif
+      if (any (isnan (x(:))) || any (isinf (x(:))))
+        error ("HPolytope.is_in: X must not contain NaN or Inf.");
+      endif
+
+      d = columns (this.A);
+
+      if (rows (x) != d)
+        if (isvector (x))
+          if (d == 1)
+            x = x.';
+          elseif (length (x) == d)
+            x = x(:);
+          else
+            error ("HPolytope.is_in: dimension of X (%d) does not match polytope dimension (%d).", ...
+                   rows (x), d);
+          endif
+        else
+          error ("HPolytope.is_in: dimension of X (%d) does not match polytope dimension (%d).", ...
+                 rows (x), d);
+        endif
+      endif
+
+      if (nargin < 3 || isempty (tol))
+        tol = 0.0;
+      endif
+      if (! isnumeric (tol) || ! isscalar (tol) || tol < 0)
+        error ("HPolytope.is_in: TOL must be a non-negative numeric scalar.");
+      endif
+      if (! isreal (tol))
+        error ("HPolytope.is_in: TOL must be a real scalar.");
+      endif
+      if (isnan (tol) || isinf (tol))
+        error ("HPolytope.is_in: TOL must not be NaN or Inf.");
+      endif
+
+      res = __volesti_HPolytope__ ("is_in", this.A, this.b, x, tol);
 
     endfunction
 

@@ -20,7 +20,7 @@ The package is in **early development**.  The current release provides:
 
 | Class | Methods | Status |
 |-------|---------|--------|
-| `HPolytope` | `sample`, `volume` | ✓ implemented |
+| `HPolytope` | `sample`, `volume`, `is_in` | ✓ implemented |
 
 ---
 
@@ -79,6 +79,10 @@ P = HPolytope (A, b);
 
 ## Volume estimate
 vol = volume (P)
+
+## Test point membership
+is_in (P, [0; 0])    # true (interior)
+is_in (P, [2; 0])    # false (outside)
 
 ## Draw 100 uniform samples
 pts = sample (P, 10, 100, [0; 0]);

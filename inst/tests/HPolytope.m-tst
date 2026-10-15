@@ -53,8 +53,32 @@
 %!error<HPolytope: A must not contain NaN or Inf.> HPolytope ([1 Inf], [1])
 %!error<HPolytope: b must not contain NaN or Inf.> HPolytope ([1; 1], [NaN])
 
+## --- is_in input validation ---
+%!error<HPolytope.is_in: X is required.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]))
+%!error<HPolytope.is_in: X must be a non-empty numeric vector or matrix.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), "a")
+%!error<HPolytope.is_in: X must be a non-empty numeric vector or matrix.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [])
+%!error<HPolytope.is_in: X must not contain NaN or Inf.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [NaN; 0])
+%!error<HPolytope.is_in: X must not contain NaN or Inf.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [Inf; 0])
+%!error<HPolytope.is_in: dimension of X (3) does not match polytope dimension (2).> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [0; 0; 0])
+%!error<HPolytope.is_in: TOL must be a non-negative numeric scalar.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [0; 0], -1)
+%!error<HPolytope.is_in: TOL must not be NaN or Inf.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [0; 0], NaN)
+%!error<HPolytope.is_in: X must be real.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [0+2i; 0])
+%!error<HPolytope.is_in: TOL must be a real scalar.> ...
+%!  is_in (HPolytope ([1 0; 0 1], [1; 1]), [0; 0], 1e-3+1i)
+%!error<HPolytope.is_in: dimension of X (2) does not match polytope dimension (1).> ...
+%!  is_in (HPolytope ([1], [1]), [0 1; 2 3])
+
 ################################################################################
-##                    ** sample / volume method tests **                       ##
+##                    ** sample / volume / is_in method tests **              ##
 ################################################################################
 
 ## These require the compiled oct-file.  A missing build is an error, not a
@@ -74,3 +98,35 @@
 %! vol = volume (P, 10, 1.0);
 %! assert (size (vol), [1, 1]);
 %! assert (vol > 0);
+
+%!test
+%! A = [1 0; -1 0; 0 1; 0 -1];
+%! b = [1; 1; 1; 1];
+%! P = HPolytope (A, b);
+%! ## Interior points
+%! assert (is_in (P, [0; 0]));
+%! assert (is_in (P, [0.5; -0.5]));
+%! ## Boundary points
+%! assert (is_in (P, [1; 0]));
+%! assert (is_in (P, [-1; 1]));
+%! ## Exterior points
+%! assert (! is_in (P, [1.1; 0]));
+%! assert (! is_in (P, [2; 2]));
+%! ## Multiple points in a single matrix call
+%! pts = [0, 0.5, 1, 1.2; 0, 0.5, 0, 0];
+%! in_poly = is_in (P, pts);
+%! assert (in_poly, [true, true, true, false]);
+%! ## Tolerance parameter
+%! assert (! is_in (P, [1.001; 0]));
+%! assert (is_in (P, [1.001; 0], 1e-2));
+
+%!test
+%! ## 1D Polytope tests: interval [-2, 2]
+%! P1 = HPolytope ([1; -1], [2; 2]);
+%! assert (is_in (P1, 0));
+%! assert (is_in (P1, 2));
+%! assert (! is_in (P1, 3));
+%! ## Row vector of 1D points
+%! assert (is_in (P1, [-2, 0, 1, 3]), [true, true, true, false]);
+%! ## Column vector of 1D points
+%! assert (is_in (P1, [-2; 0; 1; 3]), [true, true, true, false]);

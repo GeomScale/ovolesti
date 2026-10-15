@@ -232,6 +232,49 @@ do_volume (const octave_value_list &args)
   return ret;
 }
 
+static octave_value_list
+do_is_in (const octave_value_list &args)
+{
+  if (!args(3).isreal ())
+    error ("__volesti_HPolytope__: X must be real.");
+  if (!args(4).isreal ())
+    error ("__volesti_HPolytope__: TOL must be real.");
+
+  // --- unpack arguments ---
+  Matrix A_oct = args(1).matrix_value ();
+  Matrix b_oct = args(2).matrix_value ();
+  Matrix x_oct = args(3).matrix_value ();
+  double tol = args(4).double_value ();
+
+  // --- construct HPolytope ---
+  Eigen::MatrixXd Ae = oct_to_eigen_matrix (A_oct);
+  Eigen::VectorXd be = oct_to_eigen_vector (b_oct);
+  unsigned int d = static_cast<unsigned int> (Ae.cols ());
+  HPoly P (d, Ae, be);
+
+  octave_idx_type num_pts = x_oct.columns ();
+  boolNDArray res (dim_vector (1, num_pts));
+
+  for (octave_idx_type j = 0; j < num_pts; ++j)
+    {
+      Eigen::VectorXd pt_vec (d);
+      for (unsigned int i = 0; i < d; ++i)
+        pt_vec (i) = x_oct (i, j);
+
+      Point pt = eigen_to_point (pt_vec);
+      // volesti is_in returns -1 if point is in polytope, 0 otherwise
+      int status = P.is_in (pt, tol);
+      res (j) = (status == -1);
+    }
+
+  octave_value_list ret;
+  if (num_pts == 1)
+    ret(0) = octave_value (res (0));
+  else
+    ret(0) = octave_value (res);
+  return ret;
+}
+
 
 // ---------------------------------------------------------------------------
 //  Main entry point
@@ -245,8 +288,9 @@ DEFUN_DLD (__volesti_HPolytope__, args, nargout,
 Internal oct-file binding for the @qcode{HPolytope} class.\n\
 Dispatches on @var{method} to call the appropriate volesti C++ function.\n\
 \n\
-Users should call the class methods @code{HPolytope.sample} and\n\
-@code{HPolytope.volume} instead of calling this function directly.\n\
+Users should call the class methods @code{HPolytope.sample},\n\
+@code{HPolytope.volume}, and @code{HPolytope.is_in} instead of calling\n\
+this function directly.\n\
 \n\
 @seealso{HPolytope}\n\
 @end deftypefn")
@@ -271,6 +315,12 @@ Users should call the class methods @code{HPolytope.sample} and\n\
         error ("__volesti_HPolytope__: 'volume' requires A, b, WALK_LEN, "
                "ERROR, SEED.");
       retval = do_volume (args);
+    }
+  else if (method == "is_in")
+    {
+      if (args.length () != 5)
+        error ("__volesti_HPolytope__: 'is_in' requires A, b, X, TOL.");
+      retval = do_is_in (args);
     }
   else
     error ("__volesti_HPolytope__: unknown method '%s'.", method.c_str ());
