@@ -1,5 +1,34 @@
 Summary of important user-visible changes for ovolesti.
 
+ovolesti 0.0.2 (unreleased)
+===========================
+
+  ** HPolytope.sample and HPolytope.volume now raise an error for an empty,
+     flat (no interior) or unbounded polytope.  Previously these crashed the
+     whole Octave session or returned meaningless numbers.  The check solves
+     two small LPs with Octave's glpk.
+
+  ** HPolytope.sample now checks STARTING_POINT: it must be a real, finite
+     vector with one element per dimension, strictly inside the polytope.
+
+  ** SEED must be an integer between 0 and 2^32 - 1; omit it or pass []
+     for a clock-seeded generator.  Negative seeds were silently treated as
+     unseeded, and fractional or too large seeds were truncated.
+
+  ** WALK_LEN and NUM_POINTS must be integers between 1 and 2^32 - 1, and
+     ERROR must be finite.  The HPolytope constructor rejects complex A and b.
+
+  ** Zero rows of A are now ignored (an all-zero row with b < 0 makes the
+     polytope empty).
+
+  ** HPolytope.volume no longer returns the volume of the inscribed ball
+     for polytopes whose inscribed ball has radius < 1 (e.g. 0.787 instead
+     of 1.002 for the box [-0.001, 1]^2).  Fixed in volesti, which is now
+     vendored at commit 06c5355.
+
+  ** HPolytope.sample and HPolytope.volume can now be interrupted with
+     Ctrl-C.  Errors raised by volesti are reported as Octave errors.
+
 ovolesti 0.0.1 (2026-10-14)
 ============================
 

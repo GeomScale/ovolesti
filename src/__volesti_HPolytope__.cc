@@ -20,8 +20,16 @@
 #include <octave/oct.h>
 #include <string>
 #include <list>
+#include <cmath>
+#include <new>
+#include <stdexcept>
 
 using namespace std;
+
+// Let Ctrl-C interrupt volesti's random walks: they call this hook once per
+// step, and octave_quit throws octave::interrupt_exception when an interrupt
+// is pending.  It must be defined before any volesti header is included.
+#define VOLESTI_CHECK_INTERRUPT() octave_quit ()
 
 #include <Eigen/Eigen>
 
@@ -134,6 +142,17 @@ point_list_to_matrix (const list<Point> &randPoints)
 }
 
 
+// volesti reports a failed inner-ball computation with a negative radius.
+// HPolytope.m rejects empty, flat and unbounded polytopes first, so this only
+// fires on numerically hard inputs.
+static void
+compute_inner_ball (HPoly &P, const char *scope)
+{
+  if (P.ComputeInnerBall ().second < 0)
+    error ("%s: unable to compute an interior point of the polytope.", scope);
+}
+
+
 // ---------------------------------------------------------------------------
 //  Method dispatchers
 // ---------------------------------------------------------------------------
@@ -148,7 +167,7 @@ do_sample (const octave_value_list &args)
   Matrix b_oct = args(2).matrix_value ();
   unsigned int walk_len = args(3).uint_value ();
   unsigned int num_points = args(4).uint_value ();
-  int seed = args(6).int_value ();
+  double seed = args(6).double_value ();
 
   // Check for empty starting point (args(5))
   bool have_start = false;
@@ -170,15 +189,25 @@ do_sample (const octave_value_list &args)
   HPoly P (d, Ae, be);
 
   // --- interior point ---
+  // HPolytope.m has checked the size and finiteness of STARTING_POINT, so
+  // volesti can only reject it for not being strictly inside.
   Point start_pt (d);
   if (have_start)
     {
       start_pt = eigen_to_point (start_vec);
-      P.set_interior_point (start_pt);
+      try
+        {
+          P.set_interior_point (start_pt);
+        }
+      catch (const std::invalid_argument &)
+        {
+          error ("HPolytope.sample: STARTING_POINT must lie strictly "
+                 "inside the polytope.");
+        }
     }
   else
     {
-      P.ComputeInnerBall ();
+      compute_inner_ball (P, "HPolytope.sample");
       start_pt = P.InnerBall ().first;
     }
 
@@ -206,7 +235,7 @@ do_volume (const octave_value_list &args)
   Matrix b_oct = args(2).matrix_value ();
   unsigned int walk_len = args(3).uint_value ();
   double error_tol = args(4).double_value ();
-  int seed = args(5).int_value ();
+  double seed = args(5).double_value ();
 
   // --- construct HPolytope ---
   Eigen::MatrixXd Ae = oct_to_eigen_matrix (A_oct);
@@ -215,7 +244,7 @@ do_volume (const octave_value_list &args)
   HPoly P (d, Ae, be);
 
   // --- inner ball ---
-  P.ComputeInnerBall ();
+  compute_inner_ball (P, "HPolytope.volume");
 
   // --- random number generator ---
   RNG rng (d);
@@ -225,6 +254,8 @@ do_volume (const octave_value_list &args)
   // --- compute volume ---
   double vol = volume_sequence_of_balls<CDHRWalk> (P, rng, error_tol,
                                                    walk_len, 1);
+  if (! (vol > 0) || ! std::isfinite (vol))
+    error ("HPolytope.volume: volume estimation failed.");
 
   // --- return ---
   octave_value_list ret;
@@ -263,17 +294,47 @@ Users should call the class methods @code{HPolytope.sample} and\n\
       if (args.length () != 7)
         error ("__volesti_HPolytope__: 'sample' requires A, b, WALK_LEN, "
                "NUM_POINTS, STARTING_POINT, SEED.");
-      retval = do_sample (args);
     }
   else if (method == "volume")
     {
       if (args.length () != 6)
         error ("__volesti_HPolytope__: 'volume' requires A, b, WALK_LEN, "
                "ERROR, SEED.");
-      retval = do_volume (args);
     }
   else
     error ("__volesti_HPolytope__: unknown method '%s'.", method.c_str ());
+
+  // Translate volesti's C++ exceptions into Octave errors.  Octave's own
+  // exceptions (error, Ctrl-C, exit) and bad_alloc pass through: the first
+  // derives from std::runtime_error and the others from std::exception, so
+  // they must be rethrown before the generic handler.
+  try
+    {
+      if (method == "sample")
+        retval = do_sample (args);
+      else
+        retval = do_volume (args);
+    }
+  catch (const octave::execution_exception &)
+    {
+      throw;
+    }
+  catch (const octave::interrupt_exception &)
+    {
+      throw;
+    }
+  catch (const octave::exit_exception &)
+    {
+      throw;
+    }
+  catch (const std::bad_alloc &)
+    {
+      throw;
+    }
+  catch (const std::exception &e)
+    {
+      error ("HPolytope.%s: %s.", method.c_str (), e.what ());
+    }
 
   return retval;
 }

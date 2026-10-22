@@ -21,32 +21,28 @@
 ##                        ** Constructor tests **                              ##
 ################################################################################
 
-## Basic construction
 %!test
 %! A = [1 0; -1 0; 0 1; 0 -1];
 %! b = [1; 1; 1; 1];
 %! P = HPolytope (A, b);
 %! assert (P.A, A);
 %! assert (P.b, b);
-
-## Scalar inequality (1 constraint, 1 dimension)
 %!test
+%! ## Scalar inequality (1 constraint, 1 dimension)
 %! P = HPolytope ([1], [0]);
 %! assert (P.A, [1]);
 %! assert (P.b, [0]);
-
-## b coerced from row to column
 %!test
+%! ## b coerced from row to column
 %! P = HPolytope ([1 0; 0 1], [1, 1]);
 %! assert (P.b, [1; 1]);
-
-## --- input validation ---
-
-%!error<HPolytope: exactly two arguments> HPolytope ()
-%!error<HPolytope: exactly two arguments> HPolytope (1)
+%!error<HPolytope: exactly two arguments \(A, b\) are required.> HPolytope ()
+%!error<HPolytope: exactly two arguments \(A, b\) are required.> HPolytope (1)
 %!error<HPolytope: A must be a numeric matrix.> HPolytope ("a", [1; 1])
 %!error<HPolytope: b must be a non-empty numeric vector.> HPolytope ([1 0; 0 1], "b")
 %!error<HPolytope: A must be non-empty.> HPolytope ([], [])
+%!error<HPolytope: A must be real.> HPolytope ([1 0; 0 1i], [1; 1])
+%!error<HPolytope: b must be real.> HPolytope ([1 0; 0 1], [1; 1i])
 %!error<HPolytope: b must have the same number of rows as A.> ...
 %!  HPolytope ([1 0; 0 1], [1; 2; 3])
 %!error<HPolytope: A must not contain NaN or Inf.> HPolytope ([1 NaN], [1])
@@ -58,19 +54,152 @@
 ################################################################################
 
 ## These require the compiled oct-file.  A missing build is an error, not a
-## skip: silently passing would hide a broken install.
+## skip: silently passing would hide a broken install.  Statistical checks use
+## fixed seeds; their tolerances are about twice the worst deviation seen over
+## 30 seeds.
+
+%!shared cube, square
+%! square = HPolytope ([1 0; -1 0; 0 1; 0 -1], [1; 1; 1; 1]);
+%! cube = HPolytope ([eye(3); -eye(3)], ones (6, 1));
 
 %!test
-%! A = [1 0; -1 0; 0 1; 0 -1];
-%! b = [1; 1; 1; 1];
-%! P = HPolytope (A, b);
-%! pts = sample (P, 10, 5, [0; 0]);
+%! pts = sample (square, 10, 5, [0; 0]);
 %! assert (size (pts), [2, 5]);
+%!test
+%! ## Default start (Chebyshev center), row-vector start, and empty start
+%! assert (size (sample (square, 1, 4)), [2, 4]);
+%! assert (size (sample (square, 1, 4, [0.5, -0.5])), [2, 4]);
+%! assert (size (sample (square, 1, 4, [], 3)), [2, 4]);
+%!test
+%! ## Every sample lies in the polytope; mean and variance of uniform [-1, 1]
+%! pts = sample (square, 5, 1000, [], 1);
+%! assert (all (all (square.A * pts <= square.b)));
+%! assert (mean (pts, 2), [0; 0], 0.1);
+%! assert (var (pts, 0, 2), [1/3; 1/3], 0.05);
+%!test
+%! ## Triangle x, y >= 0, x + y <= 1: samples inside, mean at the centroid
+%! T = HPolytope ([-eye(2); 1 1], [0; 0; 1]);
+%! pts = sample (T, 5, 1000, [], 2);
+%! assert (all (all (T.A * pts <= T.b)));
+%! assert (mean (pts, 2), [1/3; 1/3], 0.06);
+%!test
+%! ## Simplex in R^5 from a given start point
+%! S = HPolytope ([-eye(5); ones(1, 5)], [zeros(5, 1); 1]);
+%! pts = sample (S, 2, 200, 0.1 * ones (5, 1), 4);
+%! assert (all (all (S.A * pts <= S.b)));
+%!test
+%! ## Seeds: same seed, same points; different or no seed, different points
+%! assert (sample (square, 2, 20, [], 7), sample (square, 2, 20, [], 7));
+%! assert (sample (square, 2, 20, [], 2^32 - 1), ...
+%!         sample (square, 2, 20, [], 2^32 - 1));
+%! assert (! isequal (sample (square, 2, 20, [], 7), ...
+%!                    sample (square, 2, 20, [], 8)));
+%! assert (! isequal (sample (square, 2, 20), sample (square, 2, 20)));
+%!test
+%! ## Redundant zero row; integer-valued and sparse A
+%! P = HPolytope ([1 0; -1 0; 0 1; 0 -1; 0 0], [1; 1; 1; 1; 0]);
+%! pts = sample (P, 2, 50, [], 1);
+%! assert (all (abs (pts(:)) <= 1));
+%! pts = sample (HPolytope (int32 (square.A), square.b), 2, 5, [0; 0], 1);
+%! assert (size (pts), [2, 5]);
+%! pts = sample (HPolytope (sparse (square.A), square.b), 2, 5, [0; 0], 1);
+%! assert (size (pts), [2, 5]);
+%!test
+%! ## Dimension 1
+%! pts = sample (HPolytope ([1; -1], [1; 2]), 1, 100, [], 1);
+%! assert (size (pts), [1, 100]);
+%! assert (all (pts >= -2 & pts <= 1));
+%!error<HPolytope.sample: WALK_LEN and NUM_POINTS are required.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 0, 5)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1.5, 5)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), Inf, 5)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 2^32, 5)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1i, 5)
+%!error<HPolytope.sample: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), true, 5)
+%!error<HPolytope.sample: NUM_POINTS must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, 0)
+%!error<HPolytope.sample: NUM_POINTS must be an integer between 1 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, NaN)
+%!error<HPolytope.sample: SEED must be an integer between 0 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, 5, [], -1)
+%!error<HPolytope.sample: SEED must be an integer between 0 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, 5, [], 2.7)
+%!error<HPolytope.sample: SEED must be an integer between 0 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, 5, [], 2^32)
+%!error<HPolytope.sample: SEED must be an integer between 0 and 2\^32 - 1.> ...
+%!  sample (HPolytope ([1; -1], [1; 1]), 1, 5, [], "a")
+%!error<HPolytope.sample: STARTING_POINT must be a real vector with 2 elements.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, [0; 0; 0])
+%!error<HPolytope.sample: STARTING_POINT must be a real vector with 2 elements.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, [0; 0.1i])
+%!error<HPolytope.sample: STARTING_POINT must be a real vector with 2 elements.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, "ab")
+%!error<HPolytope.sample: STARTING_POINT must not contain NaN or Inf.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, [NaN; 0])
+%!error<HPolytope.sample: STARTING_POINT must lie strictly inside the polytope.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, [2; 0])
+%!error<HPolytope.sample: STARTING_POINT must lie strictly inside the polytope.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], ones (4, 1)), 1, 5, [1; 0])
+%!error<HPolytope.sample: the polytope is empty.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], [1; 1; -2; 1]), 1, 5)
+%!error<HPolytope.sample: the polytope is empty.> ...
+%!  sample (HPolytope ([eye(2); -eye(2); 0 0], [ones(4, 1); -1]), 1, 5)
+%!error<HPolytope.sample: the polytope has an empty interior.> ...
+%!  sample (HPolytope ([eye(2); -eye(2)], [1; 1; -1; 1]), 1, 5)
+%!error<HPolytope.sample: the polytope is unbounded.> ...
+%!  sample (HPolytope ([1 0; 0 1; 0 -1], [1; 1; 1]), 1, 5)
+%!error<HPolytope.sample: the polytope is unbounded.> ...
+%!  sample (HPolytope ([1 0; -1 0], [1; 1]), 1, 5)
 
 %!test
-%! A = [1 0; -1 0; 0 1; 0 -1];
-%! b = [1; 1; 1; 1];
-%! P = HPolytope (A, b);
-%! vol = volume (P, 10, 1.0);
+%! vol = volume (square, 10, 1.0);
 %! assert (size (vol), [1, 1]);
 %! assert (vol > 0);
+%!test
+%! ## Defaults, and empty arguments meaning the default
+%! assert (volume (square) > 0);
+%! assert (volume (square, [], [], 1), volume (square, 1, 1, 1));
+%!test
+%! ## Accuracy on the cube [-1, 1]^3 (volume 8)
+%! assert (volume (cube, 1, 0.1, 1), 8, 0.05 * 8);
+%!test
+%! ## Seeds: same seed, same estimate
+%! assert (volume (cube, 1, 1, 5), volume (cube, 1, 1, 5));
+%! assert (volume (cube, 1, 1, 2^32 - 1), volume (cube, 1, 1, 2^32 - 1));
+%!test
+%! ## Dimension 1 (the interval [-2, 1]) and a redundant zero row
+%! assert (volume (HPolytope ([1; -1], [1; 2]), 1, 1, 1), 3, 1e-6);
+%! P = HPolytope ([eye(3); -eye(3); 0 0 0], [ones(6, 1); 0]);
+%! assert (volume (P, 1, 0.1, 1), 8, 0.05 * 8);
+%!test
+%! ## Inner radius < 1: the box [-1e-3, 1]^2 (area 1.002001) used to give the
+%! ## volume of its inner ball (0.787), whatever the seed or ERROR
+%! P = HPolytope ([eye(2); -eye(2)], [1; 1; 1e-3; 1e-3]);
+%! assert (volume (P, 1, 0.1, 1), 1.001^2, 0.1 * 1.001^2);
+%!error<HPolytope.volume: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 0)
+%!error<HPolytope.volume: WALK_LEN must be an integer between 1 and 2\^32 - 1.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 2.5)
+%!error<HPolytope.volume: ERROR must be a positive finite scalar.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 1, 0)
+%!error<HPolytope.volume: ERROR must be a positive finite scalar.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 1, Inf)
+%!error<HPolytope.volume: ERROR must be a positive finite scalar.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 1, NaN)
+%!error<HPolytope.volume: ERROR must be a positive finite scalar.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 1, 0.1i)
+%!error<HPolytope.volume: SEED must be an integer between 0 and 2\^32 - 1.> ...
+%!  volume (HPolytope ([1; -1], [1; 1]), 1, 1, -1)
+%!error<HPolytope.volume: the polytope is empty.> ...
+%!  volume (HPolytope ([eye(2); -eye(2)], [1; 1; -2; 1]))
+%!error<HPolytope.volume: the polytope has an empty interior.> ...
+%!  volume (HPolytope ([eye(2); -eye(2)], [1; 1; -1; 1]))
+%!error<HPolytope.volume: the polytope is unbounded.> ...
+%!  volume (HPolytope ([1 0; 0 1; 0 -1], [1; 1; 1]))
