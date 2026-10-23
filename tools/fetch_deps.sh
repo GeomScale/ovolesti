@@ -33,7 +33,7 @@ CMAKE_DIR="$VOLESTI_DIR/external/cmake-files"
 # ---------------------------------------------------------------------------
 #  Pin the volesti version here
 # ---------------------------------------------------------------------------
-VOLESTI_COMMIT="06c53558091aafe9e6cfb771a1c23af9d2e82598"
+VOLESTI_COMMIT="17186ffbaf0d5f9c55e0ea8cdc32d6e17639bee1"
 VOLESTI_URL="https://github.com/GeomScale/volesti/archive/${VOLESTI_COMMIT}.tar.gz"
 
 # ---------------------------------------------------------------------------
