@@ -159,10 +159,11 @@ BOOST_SRC="$DEPS_DIR/boost-src"
 rm -rf "$BOOST_SRC"/{libs,doc,tools,more,status}
 
 BOOST_KEEP_DIRS="
-  array        assert       concept      config       core
-  detail       exception    integer      io           iterator
-  mpl          preprocessor random       range        type_traits
-  utility
+  array        assert       concept      config       container
+  core         detail       exception    integer      io
+  iterator     lexical_cast math         move         mpl
+  numeric      predef       preprocessor random       range
+  type_traits  utility
 "
 
 if [ -d "$BOOST_SRC/boost" ]; then

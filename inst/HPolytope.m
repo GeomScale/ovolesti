@@ -181,44 +181,113 @@ classdef HPolytope
     endfunction
 
     ## -*- texinfo -*-
-    ## @deftypefn {HPolytope} {@var{vol} =} volume (@var{P})
-    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{walk_len})
-    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{walk_len}, @
-    ##                                    @var{error})
-    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{walk_len}, @
-    ##                                    @var{error}, @var{seed})
+    ## @deftypefn  {HPolytope} {@var{vol} =} volume (@var{P})
+    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{algorithm})
+    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{algorithm}, @
+    ##                                    @var{walk_len})
+    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{algorithm}, @
+    ##                                    @var{walk_len}, @var{error})
+    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{algorithm}, @
+    ##                                    @var{walk_len}, @var{error}, @var{seed})
+    ## @deftypefnx {HPolytope} {@var{vol} =} volume (@var{P}, @var{algorithm}, @
+    ##                                    @var{walk_len}, @var{error}, @var{seed}, @
+    ##                                    @var{random_walk})
+    ## @deftypefnx {HPolytope} {[@var{vol}, @var{logvol}] =} volume (@dots{})
     ##
     ## Estimate the volume of the polytope.
     ##
     ## @code{@var{vol} = volume (@var{P})} returns an estimate of the volume of
-    ## @var{P} using the sequence-of-balls algorithm with default parameters.
+    ## @var{P} computed by the cooling-balls algorithm with default parameters.
     ##
-    ## @var{walk_len} is the number of steps per random-walk iteration
-    ## (default: 1).
+    ## @var{algorithm} selects the volume algorithm:
     ##
-    ## @var{error} is the target relative error (default: 1.0).
+    ## @table @asis
+    ## @item @qcode{'CB'}
+    ## Cooling balls (default).
+    ## @item @qcode{'CG'}
+    ## Cooling Gaussians.
+    ## @item @qcode{'SoB'}
+    ## Sequence of balls.
+    ## @end table
+    ##
+    ## @var{walk_len} is the number of random-walk steps between two points.
+    ## It must be an integer between 1 and @math{2^32 - 1}.
+    ##
+    ## @var{error} is the target relative error, a positive finite scalar.
     ##
     ## @var{seed} is an integer between 0 and @math{2^32 - 1} that seeds the
     ## random number generator, so that repeated calls return the same
     ## estimate.  If omitted or empty, the generator is seeded from the clock.
+    ##
+    ## @var{random_walk} selects the random walk:
+    ##
+    ## @table @asis
+    ## @item @qcode{'CDHR'}
+    ## Coordinate-directions hit-and-run.
+    ## @item @qcode{'RDHR'}
+    ## Random-directions hit-and-run.
+    ## @item @qcode{'BaW'}
+    ## Ball walk.
+    ## @item @qcode{'Blrd'}
+    ## Accelerated billiard walk.  It is not available with @qcode{'CG'}.
+    ## @end table
+    ##
+    ## Names are case insensitive.  An omitted or empty argument takes its
+    ## default, which depends on @var{algorithm} (d is the dimension):
+    ##
+    ## @multitable @columnfractions 0.2 0.25 0.25 0.3
+    ## @headitem @var{algorithm} @tab @var{random_walk} @tab @var{walk_len}
+    ## @tab @var{error}
+    ## @item @qcode{'CB'} @tab @qcode{'Blrd'} @tab 1 @tab 0.1
+    ## @item @qcode{'CG'} @tab @qcode{'CDHR'} @tab 1 @tab 0.1
+    ## @item @qcode{'SoB'} @tab @qcode{'CDHR'} @tab @math{10 + d/10}, rounded
+    ## down @tab 1
+    ## @end multitable
+    ##
+    ## @var{logvol} is the natural logarithm of the volume.  The cooling-balls
+    ## algorithm computes it directly, so it stays finite in high dimension
+    ## even when @var{vol} overflows to @code{Inf}.
     ##
     ## @var{P} must be bounded and have a nonempty interior; otherwise an error
     ## is raised.
     ##
     ## @seealso{HPolytope.sample}
     ## @end deftypefn
-    function vol = volume (this, walk_len, error_tol, seed)
+    function [vol, logvol] = volume (this, algorithm, walk_len, error_tol, ...
+                                     seed, random_walk)
 
-      if (nargin < 2 || isempty (walk_len))
-        walk_len = 1;
+      ## Input validation
+      if (nargin < 2 || isempty (algorithm))
+        algorithm = 'CB';
       endif
-      if (nargin < 3 || isempty (error_tol))
-        error_tol = 1.0;
+      algorithm = matchName (algorithm, {'CB', 'CG', 'SoB'});
+      if (isempty (algorithm))
+        error ("HPolytope.volume: ALGORITHM must be 'CB', 'CG' or 'SoB'.");
       endif
-      if (nargin < 4)
+      if (nargin < 3 || isempty (walk_len))
+        if (strcmp (algorithm, 'SoB'))
+          walk_len = floor (10 + columns (this.A) / 10);
+        else
+          walk_len = 1;
+        endif
+      endif
+      if (nargin < 4 || isempty (error_tol))
+        if (strcmp (algorithm, 'SoB'))
+          error_tol = 1;
+        else
+          error_tol = 0.1;
+        endif
+      endif
+      if (nargin < 5)
         seed = [];
       endif
-
+      if (nargin < 6 || isempty (random_walk))
+        if (strcmp (algorithm, 'CB'))
+          random_walk = 'Blrd';
+        else
+          random_walk = 'CDHR';
+        endif
+      endif
       if (! isCount (walk_len))
         error (strcat ("HPolytope.volume: WALK_LEN must be an integer", ...
                        " between 1 and 2^32 - 1."));
@@ -228,16 +297,41 @@ classdef HPolytope
         error ("HPolytope.volume: ERROR must be a positive finite scalar.");
       endif
       seed = checkSeed (seed, "HPolytope.volume");
+      random_walk = matchName (random_walk, {'CDHR', 'RDHR', 'BaW', 'Blrd'});
+      if (isempty (random_walk))
+        error (strcat ("HPolytope.volume: RANDOM_WALK must be 'CDHR',", ...
+                       " 'RDHR', 'BaW' or 'Blrd'."));
+      endif
+      if (strcmp (algorithm, 'CG') && strcmp (random_walk, 'Blrd'))
+        error (strcat ("HPolytope.volume: the CG algorithm does not", ...
+                       " support the 'Blrd' random walk."));
+      endif
       checkPolytope (this.A, this.b, "HPolytope.volume");
 
-      vol = __volesti_HPolytope__ ("volume", this.A, this.b, walk_len, ...
-                                   error_tol, seed);
+      [vol, logvol] = __volesti_HPolytope__ ("volume", this.A, this.b, ...
+                                             algorithm, random_walk, ...
+                                             walk_len, error_tol, seed);
 
     endfunction
 
   endmethods
 
 endclassdef
+
+## Return the element of CHOICES that equals NAME ignoring case, or '' if NAME
+## is not a character vector or matches none of them.
+function name = matchName (name, choices)
+  if (ischar (name) && isrow (name))
+    idx = find (strcmpi (name, choices), 1);
+  else
+    idx = [];
+  endif
+  if (isempty (idx))
+    name = '';
+  else
+    name = choices{idx};
+  endif
+endfunction
 
 ## True if X is a real integer scalar that fits in a C++ unsigned int and is
 ## at least 1 (used for WALK_LEN and NUM_POINTS).

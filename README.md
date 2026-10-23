@@ -77,8 +77,11 @@ A = [1 0; -1 0; 0 1; 0 -1];
 b = [1; 1; 1; 1];
 P = HPolytope (A, b);
 
-## Volume estimate
+## Volume estimate (cooling balls, the default)
 vol = volume (P)
+
+## Sequence of balls with the RDHR walk, fixed seed; also the log-volume
+[vol, logvol] = volume (P, 'SoB', [], [], 42, 'RDHR')
 
 ## Draw 100 uniform samples
 pts = sample (P, 10, 100, [0; 0]);

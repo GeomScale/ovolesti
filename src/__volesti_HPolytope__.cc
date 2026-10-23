@@ -36,8 +36,14 @@ using namespace std;
 #include "cartesian_geom/cartesian_kernel.h"
 #include "convex_bodies/hpolytope.h"
 #include "sampling/random_point_generators.hpp"
-#include "volume/volume_sequence_of_balls.hpp"
 #include "random_walks/uniform_cdhr_walk.hpp"
+#include "random_walks/uniform_rdhr_walk.hpp"
+#include "random_walks/uniform_ball_walk.hpp"
+#include "random_walks/uniform_accelerated_billiard_walk.hpp"
+#include "random_walks/gaussian_rdhr_walk.hpp"
+#include "volume/volume_sequence_of_balls.hpp"
+#include "volume/volume_cooling_balls.hpp"
+#include "volume/volume_cooling_gaussians.hpp"
 #include "generators/boost_random_number_generator.hpp"
 
 
@@ -227,15 +233,82 @@ do_sample (const octave_value_list &args)
   return ret;
 }
 
+// Cooling balls (CB).  Returns (log volume, volume); the window length of the
+// convergence test follows Rvolesti: 300 for the billiard walk, 3d^2 + 400
+// for the others.
+static pair<double, double>
+volume_cb (HPoly &P, RNG &rng, const string &walk, double error_tol,
+           unsigned int walk_len, unsigned int d)
+{
+  unsigned int win_len = 3 * d * d + 400;
+  if (walk == "CDHR")
+    return volume_cooling_balls<CDHRWalk> (P, rng, error_tol, walk_len,
+                                           win_len);
+  else if (walk == "RDHR")
+    return volume_cooling_balls<RDHRWalk> (P, rng, error_tol, walk_len,
+                                           win_len);
+  else if (walk == "BaW")
+    return volume_cooling_balls<BallWalk> (P, rng, error_tol, walk_len,
+                                           win_len);
+  else if (walk == "Blrd")
+    return volume_cooling_balls<AcceleratedBilliardWalk> (P, rng, error_tol,
+                                                          walk_len, 300);
+  error ("HPolytope.volume: unknown random walk '%s'.", walk.c_str ());
+}
+
+// Cooling Gaussians (CG).  There is no Gaussian billiard walk.
+static double
+volume_cg (HPoly &P, RNG &rng, const string &walk, double error_tol,
+           unsigned int walk_len)
+{
+  if (walk == "CDHR")
+    return volume_cooling_gaussians<GaussianCDHRWalk> (P, rng, error_tol,
+                                                       walk_len);
+  else if (walk == "RDHR")
+    return volume_cooling_gaussians<GaussianRDHRWalk> (P, rng, error_tol,
+                                                       walk_len);
+  else if (walk == "BaW")
+    return volume_cooling_gaussians<GaussianBallWalk> (P, rng, error_tol,
+                                                       walk_len);
+  error ("HPolytope.volume: the CG algorithm does not support the '%s' "
+         "random walk.", walk.c_str ());
+}
+
+// Sequence of balls (SoB).
+static double
+volume_sob (HPoly &P, RNG &rng, const string &walk, double error_tol,
+            unsigned int walk_len)
+{
+  if (walk == "CDHR")
+    return volume_sequence_of_balls<CDHRWalk> (P, rng, error_tol, walk_len,
+                                               1);
+  else if (walk == "RDHR")
+    return volume_sequence_of_balls<RDHRWalk> (P, rng, error_tol, walk_len,
+                                               1);
+  else if (walk == "BaW")
+    return volume_sequence_of_balls<BallWalk> (P, rng, error_tol, walk_len,
+                                               1);
+  else if (walk == "Blrd")
+    return volume_sequence_of_balls<AcceleratedBilliardWalk> (P, rng,
+                                                              error_tol,
+                                                              walk_len, 1);
+  error ("HPolytope.volume: unknown random walk '%s'.", walk.c_str ());
+}
+
 static octave_value_list
 do_volume (const octave_value_list &args)
 {
   // --- unpack arguments ---
+  // args(0): method, args(1): A, args(2): b, args(3): algorithm,
+  // args(4): random walk, args(5): walk_len, args(6): error, args(7): seed.
+  // HPolytope.m has filled in the defaults and validated the names.
   Matrix A_oct = args(1).matrix_value ();
   Matrix b_oct = args(2).matrix_value ();
-  unsigned int walk_len = args(3).uint_value ();
-  double error_tol = args(4).double_value ();
-  double seed = args(5).double_value ();
+  string algorithm = args(3).string_value ();
+  string walk = args(4).string_value ();
+  unsigned int walk_len = args(5).uint_value ();
+  double error_tol = args(6).double_value ();
+  double seed = args(7).double_value ();
 
   // --- construct HPolytope ---
   Eigen::MatrixXd Ae = oct_to_eigen_matrix (A_oct);
@@ -252,14 +325,34 @@ do_volume (const octave_value_list &args)
     rng.set_seed (static_cast<unsigned> (seed));
 
   // --- compute volume ---
-  double vol = volume_sequence_of_balls<CDHRWalk> (P, rng, error_tol,
-                                                   walk_len, 1);
-  if (! (vol > 0) || ! std::isfinite (vol))
+  // CB works in log space; the others return the volume itself
+  double vol, logvol;
+  if (algorithm == "CB")
+    {
+      pair<double, double> res = volume_cb (P, rng, walk, error_tol,
+                                            walk_len, d);
+      logvol = res.first;
+      vol = res.second;
+    }
+  else
+    {
+      if (algorithm == "CG")
+        vol = volume_cg (P, rng, walk, error_tol, walk_len);
+      else if (algorithm == "SoB")
+        vol = volume_sob (P, rng, walk, error_tol, walk_len);
+      else
+        error ("HPolytope.volume: unknown algorithm '%s'.",
+               algorithm.c_str ());
+      logvol = std::log (vol);
+    }
+  // CB reports a failed cooling schedule as volume 0
+  if (! (vol > 0) || std::isnan (vol) || std::isnan (logvol))
     error ("HPolytope.volume: volume estimation failed.");
 
   // --- return ---
   octave_value_list ret;
   ret(0) = octave_value (vol);
+  ret(1) = octave_value (logvol);
   return ret;
 }
 
@@ -297,9 +390,9 @@ Users should call the class methods @code{HPolytope.sample} and\n\
     }
   else if (method == "volume")
     {
-      if (args.length () != 6)
-        error ("__volesti_HPolytope__: 'volume' requires A, b, WALK_LEN, "
-               "ERROR, SEED.");
+      if (args.length () != 8)
+        error ("__volesti_HPolytope__: 'volume' requires A, b, ALGORITHM, "
+               "RANDOM_WALK, WALK_LEN, ERROR, SEED.");
     }
   else
     error ("__volesti_HPolytope__: unknown method '%s'.", method.c_str ());

@@ -3,6 +3,18 @@ Summary of important user-visible changes for ovolesti.
 ovolesti 0.0.2 (unreleased)
 ===========================
 
+  ** HPolytope.volume has a new signature,
+     [VOL, LOGVOL] = volume (P, ALGORITHM, WALK_LEN, ERROR, SEED, RANDOM_WALK),
+     and offers volesti's three volume algorithms: 'CB' (cooling balls, the
+     new default), 'CG' (cooling Gaussians) and 'SoB' (sequence of balls,
+     the only one before).  RANDOM_WALK is 'CDHR', 'RDHR', 'BaW' (ball walk)
+     or 'Blrd' (accelerated billiard walk, not with 'CG').  Defaults follow
+     the R package: CB uses Blrd, WALK_LEN 1 and ERROR 0.1; CG uses CDHR, 1
+     and 0.1; SoB uses CDHR, floor (10 + d/10) and 1.  LOGVOL is the
+     logarithm of the volume.  Calls of the old form volume (P, WALK_LEN,
+     ERROR, SEED) now raise an error: pass 'SoB' as ALGORITHM to keep the
+     old algorithm.
+
   ** HPolytope.sample and HPolytope.volume now raise an error for an empty,
      flat (no interior) or unbounded polytope.  Previously these crashed the
      whole Octave session or returned meaningless numbers.  The check solves
@@ -24,7 +36,7 @@ ovolesti 0.0.2 (unreleased)
   ** HPolytope.volume no longer returns the volume of the inscribed ball
      for polytopes whose inscribed ball has radius < 1 (e.g. 0.787 instead
      of 1.002 for the box [-0.001, 1]^2).  Fixed in volesti, which is now
-     vendored at commit 06c5355.
+     vendored at commit 17186ff.
 
   ** HPolytope.sample and HPolytope.volume can now be interrupted with
      Ctrl-C.  Errors raised by volesti are reported as Octave errors.
